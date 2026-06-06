@@ -79,6 +79,43 @@ export function fixMarkdownImage(imgList: string[], mdData: string, htmlData: st
 }
 
 
+/**
+ * 去除非代码块中的 <font> 标签，保留标签内的文本内容
+ */
+export function fixFontTag(mdData: string) {
+  const fontTagReg = /<font[^>]*>([\s\S]*?)<\/font>/gi
+  const codeBlockReg = /(`{1,3})[\s\S]*?\1/g
+
+  // 记录代码块的位置范围
+  const codeRanges: Array<[number, number]> = []
+  let match: RegExpExecArray | null
+  while ((match = codeBlockReg.exec(mdData)) !== null) {
+    codeRanges.push([match.index, match.index + match[0].length])
+  }
+
+  // 从后往前替换，避免索引偏移
+  const replacements: Array<{ start: number; end: number; content: string }> = []
+  while ((match = fontTagReg.exec(mdData)) !== null) {
+    const isInCodeBlock = codeRanges.some(
+      ([start, end]) => match!.index >= start && match!.index < end
+    )
+    if (!isInCodeBlock) {
+      replacements.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        content: match[1]
+      })
+    }
+  }
+
+  let result = mdData
+  for (let i = replacements.length - 1; i >= 0; i--) {
+    const { start, end, content } = replacements[i]
+    result = result.slice(0, start) + content + result.slice(end)
+  }
+  return result
+}
+
 export function fixPath(dirPath: string) {
   if (!dirPath) return ''
   const dirNameReg = /[\\/:*?"<>|\n\r]/g
@@ -129,5 +166,8 @@ export function fixInlineCode(mdData: string, htmlData: string) {
     inlineCodeNode.value = `<code>${inlineCodeNode.value}</code>`
   })
   fixMdData = toMd(ast)
+  // 修复font标签
+  fixMdData = fixFontTag(fixMdData);
+  
   return fixMdData
 }
